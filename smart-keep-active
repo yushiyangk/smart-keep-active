@@ -6,12 +6,36 @@ ACTIVE_INTERVAL_SEC=120
 READ_BYTES=256
 
 
+tmp_dir="$(mktemp -d .smart-keep-active.XXXXXXXXXX)"
+
 keep_active() {
 	dev="$1"
+	if [ ! -b "$dev" ]; then
+		echo "keep_active: $dev is not a block device" >&2
+		return 1
+	fi
+
+	devname="$(basename "$dev")"
+	i=0
+	while [ -e "$tmp_dir/$devname.$i" ]; do
+		if [ "$(readlink "tmp_dir/$devname.$i")" = "$dev" ]; then
+			# There is already a keep_active process for this device running
+			return 0
+		fi
+		i=$((i + 1))
+	done
+
+	lockfile="$tmp_dir/$devname.$i"
+
+	trap 'rm -f "$lockfile"' EXIT
+	ln -s "$dev" "$lockfile"
+
 	while smartctl -n standby -c "$dev" 2> /dev/null | grep -q "Self-test routine in progress"; do
 		head --bytes="$READ_BYTES" "$dev" > /dev/null 2> /dev/null
-		exec -a 'sleep (keep_active)' sleep "$ACTIVE_INTERVAL_SEC"
+		sleep "$ACTIVE_INTERVAL_SEC"
 	done
+
+	rm "$lockfile"
 }
 
 journalctl -u "$SMARTMONTOOLS_UNIT" -b --output=cat | while read -r line; do

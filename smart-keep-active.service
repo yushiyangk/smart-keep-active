@@ -1,7 +1,7 @@
 [Unit]
-Description=Monitor Smartmontools and prevent spin-down by hd-idle when a SMART test is running
-After=smartd.service hd-idle.service
-BindsTo=smartd.service
+Description=Watch for SMART self-tests and prevent spin-down by hd-idle
+After=hd-idle.service
+BindsTo=hd-idle.service
 
 [Service]
 Type=simple
@@ -9,4 +9,4 @@ ExecStart=/opt/smart-keep-active/smart-keep-active
 Restart=always
 
 [Install]
-WantedBy=smartd.service
+WantedBy=hd-idle.service

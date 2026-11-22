@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 
+SMARTMONTOOLS_UNIT='smartmontools.service'
 ACTIVE_INTERVAL_SEC=120
 READ_BYTES=256
 
@@ -8,12 +9,12 @@ READ_BYTES=256
 keep_active() {
 	dev="$1"
 	while smartctl -n standby -c "$dev" 2> /dev/null | grep -q "Self-test routine in progress"; do
-		head -c "$READ_BYTES" "$dev" > /dev/null 2> /dev/null
+		head --bytes="$READ_BYTES" "$dev" > /dev/null 2> /dev/null
 		exec -a 'sleep (keep_active)' sleep "$ACTIVE_INTERVAL_SEC"
 	done
 }
 
-journalctl -u smartmontools -b -o cat | while read -r line; do
+journalctl -u "$SMARTMONTOOLS_UNIT" -b --output=cat | while read -r line; do
 	case "$line" in
 		*Device:\ *\ starting\ scheduled\ *Self-Test*)
 			dev="$(echo "${line#Device: }" | sed 's/ *\[.\+\], *starting scheduled .*Self-Test.*$//')"

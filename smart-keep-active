@@ -11,7 +11,7 @@ tmp_dir="$(mktemp -d .smart-keep-active.XXXXXXXXXX)"
 keep_active() {
 	dev="$1"
 	if [ ! -b "$dev" ]; then
-		echo "keep_active: $dev is not a block device" >&2
+		echo "keep_active: $dev is not a block device; ignoring" >&2
 		return 1
 	fi
 
@@ -19,7 +19,7 @@ keep_active() {
 	i=0
 	while [ -e "$tmp_dir/$devname.$i" ]; do
 		if [ "$(readlink "tmp_dir/$devname.$i")" = "$dev" ]; then
-			# There is already a keep_active process for this device running
+			echo "keep_active: $dev self-test already being monitored (lockfile $tmp_dir/$devname.$i)"
 			return 0
 		fi
 		i=$((i + 1))
@@ -36,12 +36,14 @@ keep_active() {
 	done
 
 	rm "$lockfile"
+	echo "keep_active: $dev self-test completed"
 }
 
 journalctl --unit="$SMARTMONTOOLS_UNIT" --follow --boot --output=cat | while read -r line; do
 	case "$line" in
 		*Device:\ *\ starting\ scheduled\ *Self-Test*)
 			dev="$(echo "$line" | sed 's/^Device: *//' | sed 's/ *\[.\+\], *starting scheduled .*Self-Test.*$//')"
+			echo "$dev self-test started by smartmontools"
 			keep_active "$dev" &
 			;;
 	esac

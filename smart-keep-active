@@ -38,11 +38,10 @@ keep_active() {
 	rm "$lockfile"
 }
 
-journalctl -u "$SMARTMONTOOLS_UNIT" -b --output=cat | while read -r line; do
+journalctl --unit="$SMARTMONTOOLS_UNIT" --follow --boot --output=cat | while read -r line; do
 	case "$line" in
 		*Device:\ *\ starting\ scheduled\ *Self-Test*)
 			dev="$(echo "$line" | sed 's/^Device: *//' | sed 's/ *\[.\+\], *starting scheduled .*Self-Test.*$//')"
-			echo "$dev!"
 			keep_active "$dev" &
 			;;
 	esac

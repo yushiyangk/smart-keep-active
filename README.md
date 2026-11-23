@@ -6,8 +6,8 @@ Prevent automatic spin-down by hd-idle when SMART self-tests are running
 
 It monitors:
 
-1. `journalctl` logs of the smartmontools service for the start of any scheduled self-tests
-2. the self-test state of each hard disk at a configurable interval, if not already spun down
+1. system logs of the smartmontools service for any scheduled self-tests that are starting
+2. the self-test state of each hard disk, if not already spun down
 
 If a self-test is detected, it performs a small read from that disk at regular intervals to update `/proc/diskstats` and prevent hd-idle from treating it as idle.
 
@@ -36,6 +36,6 @@ Edit the `smart-keep-active` script to modify its constant parameters:
 - **`SMARTMONTOOLS_UNIT`**: name of the Smartmontools service unit as seen by `journalctl` (test with <code>journalctl -u <var>unit_name</var></code>)
 - **`CHECK_INTERVAL_SEC`**: probe each hard disk's self-test state at this interval (disks that are already spun down will not be spun up by this)
 - **`ACTIVE_INTERVAL_SEC`**: how frequent to perform a disk read to keep it active
-- **`READ_BYTES`**: size of disk read (the read value is discarded)
+- **`READ_BYTES`**: size of disk read (the read value is piped to `/dev/null`)
 
 Ensure that `CHECK_INTERVAL_SEC` and `ACTIVE_INTERVAL_SEC` are shorter than the idle time configured in hd-idle.

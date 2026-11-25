@@ -21,11 +21,17 @@ keep_active() {
 	fi
 
 	devrealpath="$(realpath "$dev")"
+	if [ "$devrealpath" = "$dev" ]; then
+		devlabel="$devrealpath"
+	else
+		devlabel="$devrealpath ($dev)"
+	fi
+
 	devname="$(basename "$devrealpath")"
 	i=0
 	while [ -e "$keep_active_tmp/$devname.$i" ]; do
-		if [ "$(readlink "tmp_dir/$devname.$i")" = "$dev" ]; then
-			echo "keep_active: $dev already being kept active (lockfile $keep_active_tmp/$devname.$i)"
+		if [ "$(readlink "tmp_dir/$devname.$i")" = "$devrealpath" ]; then
+			echo "keep_active: $devlabel already being kept active (lockfile $keep_active_tmp/$devname.$i)"
 			return 0
 		fi
 		i=$((i + 1))
@@ -35,7 +41,7 @@ keep_active() {
 	pidfile="$keep_active_tmp/$devname.$i.pid"
 	trap 'rm -f "$lockfile"; rm -f "$pidfile"' INT TERM
 
-	ln -s "$dev" "$lockfile"
+	ln -s "$devrealpath" "$lockfile"
 	echo "$$" > "$pidfile"
 
 	while smartctl -n standby --capabilities "$dev" 2> /dev/null | grep -q "Self-test routine in progress"; do
@@ -45,11 +51,7 @@ keep_active() {
 
 	rm "$lockfile"
 	rm "$pidfile"
-	if [ "$devrealpath" = "$dev" ]; then
-		echo "keep_active: $dev $selftest completed"
-	else
-		echo "keep_active: $devrealpath ($dev) $selftest completed"
-	fi
+	echo "keep_active: $devlabel $selftest completed"
 }
 
 cleanup_keep_active() {

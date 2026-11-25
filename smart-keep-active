@@ -80,8 +80,32 @@ monitor_disks() {
 				fi
 
 				if smartctl -n standby --capabilities "$dev" 2> /dev/null | grep -q "Self-test routine in progress"; then
-					echo "monitor_disks: $dev self-test detected"
-					keep_active "$dev" &
+					devrealpath="$(realpath "$dev")"
+					if [ "$devrealpath" = "$dev" ]; then
+						devlabel="$devrealpath"
+					else
+						devlabel="$devrealpath ($dev)"
+					fi
+
+					active=0
+
+					devname="$(basename "$devrealpath")"
+					i=0
+					while [ -e "$keep_active_tmp/$devname.$i" ]; do
+						if [ "$(readlink "tmp_dir/$devname.$i")" = "$devrealpath" ]; then
+							active=1
+							break
+						fi
+						i=$((i + 1))
+					done
+
+					if [ "$active" -eq 1 ]; then
+						echo "monitor_disks: $devlabel already being kept active (lockfile $keep_active_tmp/$devname.$i)"
+						continue
+					else
+						echo "monitor_disks: $devlabel self-test detected"
+						keep_active "$dev" &
+					fi
 				fi
 			fi
 		done

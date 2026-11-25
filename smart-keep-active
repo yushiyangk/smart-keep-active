@@ -8,6 +8,7 @@ READ_BYTES=256
 
 
 keep_active_tmp="$(mktemp --tmpdir=/tmp --directory .smart-keep-active.XXXXXXXXXX)"
+echo "Temp directory: $keep_active_tmp"
 
 keep_active() {
 	dev="$1"
@@ -39,33 +40,37 @@ keep_active() {
 
 	lockfile="$keep_active_tmp/$devname.$i"
 	pidfile="$keep_active_tmp/$devname.$i.pid"
-	trap 'rm -f "$lockfile"; rm -f "$pidfile"' INT TERM
+	trap 'trap "" INT TERM HUP; flock "$keep_active_tmp/lock" rm -f "$lockfile" "$pidfile"; echo "keep_active: $devlabel terminated"; exit' INT TERM HUP
 
-	ln -s "$devrealpath" "$lockfile"
-	echo "$$" > "$pidfile"
+	{
+		flock 3
+		ln -s "$devrealpath" "$lockfile"
+		echo "$BASHPID" > "$pidfile"
+	} 3> "$keep_active_tmp/lock"
 
 	while smartctl -n standby --capabilities "$dev" 2> /dev/null | grep -q "Self-test routine in progress"; do
 		head --bytes="$READ_BYTES" "$dev" > /dev/null 2> /dev/null
-		sleep "$ACTIVE_INTERVAL_SEC"
+		sleep "$ACTIVE_INTERVAL_SEC" &
+		wait $!
 	done
 
-	rm "$lockfile"
-	rm "$pidfile"
+	flock "$keep_active_tmp/lock" rm "$lockfile" "$pidfile"
 	echo "keep_active: $devlabel $selftest completed"
 }
 
 cleanup_keep_active() {
-	for pidfile in "$keep_active_tmp"/*.pid; do
-		if [ -e "$pidfile" ]; then
-			pid="$(cat "$pidfile" || echo '')"
-			if [ -n "$pid" ]; then
-				kill "$pid" 2> /dev/null
-			fi
+	{
+		flock 3
+		pidfiles=("$keep_active_tmp"/*.pid)
+	} 3> "$keep_active_tmp/lock"
+	for pidfile in "${pidfiles[@]}"; do
+		pid="$(cat "$pidfile" 2> /dev/null || echo '')"
+		if [ -n "$pid" ]; then
+			kill "$pid" 2> /dev/null
+			# Wait for process to exit
+			tail --pid="$pid" -f /dev/null 2>/dev/null
 		fi
 	done
-	if [ -d "$keep_active_tmp" ]; then
-		rmdir "$keep_active_tmp"  # Log errors
-	fi
 }
 
 monitor_disks() {
@@ -109,14 +114,15 @@ monitor_disks() {
 				fi
 			fi
 		done
-		sleep "$CHECK_INTERVAL_SEC"
+		sleep "$CHECK_INTERVAL_SEC" &
+		wait $!
 	done
 }
 
 monitor_disks &
 monitor_pid=$!
 
-trap 'kill "$monitor_pid" 2> /dev/null; cleanup_keep_active' INT TERM
+trap 'trap "" INT TERM HUP; kill "$monitor_pid" 2> /dev/null; cleanup_keep_active; exit' INT TERM HUP
 
 
 while read -r line; do

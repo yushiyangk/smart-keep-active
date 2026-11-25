@@ -15,8 +15,13 @@ keep_active() {
 		echo "keep_active: $dev is not a block device; ignoring" >&2
 		return 1
 	fi
+	selftest="$2"
+	if [ -z "$selftest" ]; then
+		selftest="self-test"
+	fi
 
-	devname="$(basename "$dev")"
+	devrealpath="$(realpath "$dev")"
+	devname="$(basename "$devrealpath")"
 	i=0
 	while [ -e "$keep_active_tmp/$devname.$i" ]; do
 		if [ "$(readlink "tmp_dir/$devname.$i")" = "$dev" ]; then
@@ -40,7 +45,11 @@ keep_active() {
 
 	rm "$lockfile"
 	rm "$pidfile"
-	echo "keep_active: $dev self-test completed"
+	if [ "$devrealpath" = "$dev" ]; then
+		echo "keep_active: $dev $selftest completed"
+	else
+		echo "keep_active: $devrealpath ($dev) $selftest completed"
+	fi
 }
 
 cleanup_keep_active() {
@@ -87,9 +96,15 @@ trap 'kill "$monitor_pid" 2> /dev/null; cleanup_keep_active' INT TERM
 while read -r line; do
 	case "$line" in
 		*Device:\ *\ starting\ scheduled\ *Self-Test*)
+			selftest="$(echo "$line" | sed 's/^Device: *.*starting scheduled //' | sed 's/\.$//')"
 			dev="$(echo "$line" | sed 's/^Device: *//' | sed 's/ *\[.\+\], *starting scheduled .*Self-Test.*$//')"
-			echo "$dev self-test started by smartmontools"
-			keep_active "$dev" &
+			devrealpath="$(realpath "$dev")"
+			if [ "$devrealpath" = "$dev" ]; then
+				echo "$devrealpath $selftest started by smartmontools"
+			else
+				echo "$devrealpath ($dev) $selftest started by smartmontools"
+			fi
+			keep_active "$dev" "$selftest" &
 			;;
 	esac
 done < <(journalctl --unit="$SMARTMONTOOLS_UNIT" --follow --boot --output=cat)
